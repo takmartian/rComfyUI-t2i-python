@@ -329,7 +329,6 @@ def _main_logger(level=logging.INFO):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ComfyUI text2image client")
-    parser.add_argument("--server-address", default="127.0.0.1:8188", help="ComfyUI server address")
     parser.add_argument("--model", required=True, help="Checkpoint model name in ComfyUI")
     parser.add_argument("--positive-prompt", required=True, help="Positive prompt text")
     parser.add_argument("--negative-prompt", default=None, help="Optional negative prompt override")
@@ -363,7 +362,7 @@ def main():
     log.info("=" * 50)
 
     comfyui_client = ComfyUIClient(
-        args.server_address,
+        os.getenv("COMFYUI_SERVER_ADDRESS"),
         args.model,
         https=args.https,
         log_level=getattr(logging, args.log_level.upper(), logging.INFO)
