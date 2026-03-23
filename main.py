@@ -168,6 +168,7 @@ class ComfyUIClient:
         scheduler = kwargs.get('scheduler', 'sgm_uniform')
         denoise_strength = kwargs.get('denoise_strength', 1.0)
         output_path = kwargs.get('output_dir')
+        output_name = kwargs.get('output_name')
         if not output_path:
             output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "text2image")
 
@@ -260,13 +261,19 @@ class ComfyUIClient:
 
         # ── 保存图片 ────────────────────────────────────────────
         os.makedirs(output_path, exist_ok=True)
+        saved_files = []
 
         if '7' in output_images:
             for idx, img_data in enumerate(output_images['7']):
                 try:
                     image = Image.open(io.BytesIO(img_data))
-                    out_file = os.path.join(output_path, f"gen_{seed}_{idx}.png")
+                    if output_name:
+                        filename = f"{output_name}.png" if len(output_images['7']) == 1 else f"{output_name}_{idx}.png"
+                    else:
+                        filename = f"gen_{seed}_{idx}.png"
+                    out_file = os.path.join(output_path, filename)
                     image.save(out_file)
+                    saved_files.append(out_file)
                     self.logger.info(f"✅ 图片已保存 [{idx + 1}/{len(output_images['7'])}]: {out_file}")
                 except Exception as e:
                     self.logger.error(f"保存图片失败 [{idx}]: {e}")
@@ -286,14 +293,22 @@ class ComfyUIClient:
                                 folder_type=img_info.get('type', 'output')
                             )
                             if img:
-                                out_file = os.path.join(output_path, img_info['filename'])
+                                if output_name:
+                                    # Use deterministic naming for history fallback as well.
+                                    filename = f"{output_name}.png" if len(node_output.get('images', [])) == 1 else f"{output_name}_{saved}.png"
+                                else:
+                                    filename = img_info['filename']
+                                out_file = os.path.join(output_path, filename)
                                 img.save(out_file)
                                 saved += 1
+                                saved_files.append(out_file)
                                 self.logger.info(f"✅ 图片已保存: {out_file}")
                 if saved == 0:
                     self.logger.warning("History API 中未找到任何图片")
             except Exception as e:
                 self.logger.error(f"History API 获取失败: {e}")
+
+        return saved_files
 
 
 def _main_logger(level=logging.INFO):
@@ -327,6 +342,7 @@ def parse_args():
     parser.add_argument("--scheduler", default="sgm_uniform", help="Scheduler name")
     parser.add_argument("--denoise-strength", type=float, default=1.0, help="Denoise strength")
     parser.add_argument("--output-dir", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "text2image"), help="Directory for generated images")
+    parser.add_argument("--output-name", default=None, help="Output filename without extension, e.g. my_image")
     parser.add_argument("--https", action="store_true", help="Use HTTPS/WSS")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], help="Log level")
     return parser.parse_args()
@@ -362,13 +378,20 @@ def main():
         "scheduler": args.scheduler,
         "denoise_strength": args.denoise_strength,
         "output_dir": args.output_dir,
+        "output_name": args.output_name,
     }
     if args.seed is not None:
         start_kwargs["seed"] = args.seed
     if args.negative_prompt is not None:
         start_kwargs["negative_prompt"] = args.negative_prompt
 
-    comfyui_client.start(args.positive_prompt, **start_kwargs)
+    saved_files = comfyui_client.start(args.positive_prompt, **start_kwargs)
+    if saved_files:
+        log.info(f"Saved {len(saved_files)} image(s)")
+        # Print first file path for CLI consumers.
+        print(saved_files[0])
+    else:
+        log.warning("No image file was saved")
 
 
 if __name__ == "__main__":
