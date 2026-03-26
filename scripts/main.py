@@ -5,17 +5,17 @@ import lark_send
 # 命令行入参
 def parse_args():
     parser = argparse.ArgumentParser(description="Lark Image Sender")
-    parser.add_argument("--chat_id", type=str, help="Lark chat ID to send the image to")
-    parser.add_argument("--open_id", type=str, help="Lark open ID to send the image to")
+    parser.add_argument("--chat_id", type=str, help="Lark chat ID or open ID to send the image to")
     parser.add_argument("--positive_prompt", type=str, default="best quality, masterpiece", help="Positive prompt for image generation")
     parser.add_argument("--negative_prompt", type=str, default="", help="Negative prompt for image generation")
+    parser.add_argument("--selfee", action="store_true", help="Use selfee model/size from config.ini")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    generated_image_path = t2i.start(args.positive_prompt, args.negative_prompt)
-    lark_send.start(generated_image_path, args.chat_id, args.open_id)
+    generated_image_path = t2i.start(args.positive_prompt, args.negative_prompt, selfee=args.selfee)
+    lark_send.start(generated_image_path, args.chat_id)
 
 
 if __name__ == "__main__":

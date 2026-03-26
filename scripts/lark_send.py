@@ -23,10 +23,9 @@ def get_token():
 
 
 class LarkImageSender:
-    def __init__(self, chat_id=None, open_id=None, image_path=None):
+    def __init__(self, chat_id=None, image_path=None):
         self.token = get_token()
         self.chat_id = chat_id
-        self.open_id = open_id
         self.image_path = image_path
 
     def upload_image(self, image_path):
@@ -48,12 +47,11 @@ class LarkImageSender:
 
 
     def send_message(self):
-        if self.chat_id:
-            receive_id_type = "chat_id"
-            receive_id = self.chat_id
-        else:
+        if self.chat_id.startswith("ou_"):
             receive_id_type = "open_id"
-            receive_id = self.open_id
+        else:
+            receive_id_type = "chat_id"
+        receive_id = self.chat_id
 
         url = f"https://open.larksuite.com/open-apis/im/v1/messages?receive_id_type={receive_id_type}"
 
@@ -78,7 +76,7 @@ class LarkImageSender:
         return 'Image sent successfully!'
 
 
-def start(image_path: str, chat_id: str = None, open_id: str = None):
-    sender = LarkImageSender(chat_id=chat_id, open_id=open_id, image_path=image_path)
+def start(image_path: str, chat_id: str = None):
+    sender = LarkImageSender(chat_id=chat_id, image_path=image_path)
     return sender.send_message()
 

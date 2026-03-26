@@ -1,16 +1,17 @@
 # rComfyUI-t2i
 
-通过 ComfyUI WebSocket API 进行文生图，支持生成完毕后直接推送图片到飞书会话。
+通过 ComfyUI WebSocket API 进行文生图，生成完毕后自动推送图片到飞书会话。
 
 ## 项目结构
 
 ```
 rComfyUI-t2i/
 ├── README.md
+├── SKILL.md              # Agent 使用指南
 ├── .gitignore
 └── scripts/
-    ├── main.py          # CLI 入口
-    ├── t2i.py            # ComfyUIClient 文生图核心
+    ├── main.py           # CLI 入口，串联生图与发送
+    ├── t2i.py            # ComfyUI 文生图客户端
     ├── lark_send.py      # 飞书图片推送
     └── config.ini        # 运行参数配置
 ```
@@ -21,6 +22,14 @@ rComfyUI-t2i/
 pip install websocket-client requests requests-toolbelt Pillow
 ```
 
+## 环境变量
+
+| 变量名 | 必填 | 说明 |
+|---|---|---|
+| `COMFYUI_SERVER_ADDRESS` | 是 | ComfyUI 服务地址，如 `192.168.1.1:8188` |
+| `LARK_APP_ID` | 是 | 飞书应用 App ID |
+| `LARK_APP_SECRET` | 是 | 飞书应用 App Secret |
+
 ## config.ini
 
 ```ini
@@ -28,133 +37,75 @@ pip install websocket-client requests requests-toolbelt Pillow
 model=ponyRealism_V22.safetensors
 image-width=1024
 image-height=1024
-steps=28
-cfg=8.0
+steps=45
+cfg=5.0
 sampler=euler
-scheduler=sgm_uniform
+scheduler=karras
 denoise_strength=1.0
+selfeeModel=animePastelDream_softBakedVae.safetensors
+selfeeWidth=512
+selfeeHeight=768
 ```
 
-| 参数 | 默认值 | 说明 |
-|---|---|---|
-| `model` | ponyRealism_V22.safetensors | 模型文件名 |
-| `image-width` | 1024 | 输出宽度 |
-| `image-height` | 1024 | 输出高度 |
-| `steps` | 28 | 采样步数 |
-| `cfg` | 8.0 | CFG 强度 |
-| `sampler` | euler | 采样器 |
-| `scheduler` | sgm_uniform | 调度器 |
-| `denoise_strength` | 1.0 | 去噪强度 |
-
-## 环境变量
-
-| 变量名 | 说明 |
+| 参数 | 说明 |
 |---|---|
-| `COMFYUI_SERVER_ADDRESS` | ComfyUI 服务地址（必填） |
-| `LARK_APP_ID` | 飞书应用 App ID |
-| `LARK_APP_SECRET` | 飞书应用 App Secret |
+| `model` | 默认模型文件名 |
+| `image-width` / `image-height` | 默认输出分辨率 |
+| `steps` | 采样步数 |
+| `cfg` | CFG 强度 |
+| `sampler` | 采样器 |
+| `scheduler` | 调度器 |
+| `denoise_strength` | 去噪强度 |
+| `selfeeModel` | selfee 模式专用模型 |
+| `selfeeWidth` / `selfeeHeight` | selfee 模式输出分辨率 |
 
-## main.py — CLI 入口
+## 使用方法
 
 ```bash
 cd scripts
-python main.py --chat_id "oc_xxxx" --positive_prompt "1girl, solo, smile"
 ```
+
+### 普通模式
 
 ```bash
 python main.py \
-  --chat_id "oc_05c5e4841b334bc11ec0a5c6678a1d7b" \
-  --positive_prompt "masterpiece, best quality, 1girl, solo, looking at viewer, smile"
+  --chat_id "<chat_id 或 open_id>" \
+  --positive_prompt "masterpiece, best quality, 1girl, solo, smile" \
+  --negative_prompt "blurry, low quality"
+```
+
+### selfee 模式
+
+使用预设的粉发猫耳少女角色，只需描述动作、表情、环境、场所、天气等，人物与负向提示词均已内置。
+
+```bash
+python main.py \
+  --chat_id "<chat_id 或 open_id>" \
+  --selfee \
+  --positive_prompt "laughing, sitting under cherry blossoms, petals falling, soft spring light"
 ```
 
 ### 参数说明
 
-| 参数 | 必传 | 默认值 | 说明 |
-|---|---|---|---|
-| `--positive_prompt` | 是 | — | 正向提示词（英文） |
-| `--negative_prompt` | 否 | worst quality, low quality... | 负向提示词 |
-| `--chat_id` | 二选一 | — | 飞书群 ID（群聊/频道） |
-| `--open_id` | 二选一 | — | 飞书用户 open ID（私聊） |
-
-## t2i.py — ComfyUIClient
-
-WebSocket 与 ComfyUI 通信的核心类。
-
-### 节点映射
-
-| 节点 ID | 类型 | 用途 |
+| 参数 | 必传 | 说明 |
 |---|---|---|
-| 1 | CheckpointLoaderSimple | 加载模型 |
-| 2 | CLIPTextEncode | 正向提示词 |
-| 3 | CLIPTextEncode | 负向提示词 |
-| 4 | EmptyLatentImage | 潜在空间尺寸 |
-| 5 | KSampler | 采样器 |
-| 6 | VAEDecode | VAE 解码 |
-| 7 | PreviewImage | 预览图片（WebSocket 二进制输出） |
+| `--chat_id` | 是 | 飞书群 ID（`oc_` 开头）或用户 open ID（`ou_` 开头） |
+| `--positive_prompt` | 是 | 正向提示词（英文） |
+| `--negative_prompt` | 否 | 负向提示词，selfee 模式下忽略 |
+| `--selfee` | 否 | 启用 selfee 模式，覆盖模型与分辨率，并使用内置角色和负向提示词 |
 
-### 生成流程
+`--chat_id` 根据前缀自动判断发送类型：
+- `oc_` 开头 → 群聊（chat_id）
+- `ou_` 开头 → 私聊（open_id）
 
-1. 连接 WebSocket `/ws?clientId=xxx`
-2. POST `/prompt` 提交任务
-3. 监听 WebSocket，收集节点 7 的二进制图片数据
-4. 任务完成后，从 `/history/{prompt_id}` 获取输出文件
-5. 下载图片保存到 `output/` 目录
+## 生成流程
 
-### Python API
-
-```python
-from t2i import start, ComfyUIClient
-
-# 简单用法
-saved_file = start(
-    positive_prompt="a golden retriever holding a Coca-Cola bottle, realistic photography",
-    negative_prompt="",
-    output_name="dog_coke"  # 可选，默认 UUID
-)
-
-# 直接用 Client
-client = ComfyUIClient(
-    positive_prompt="1girl, solo, smile",
-    negative_prompt="",
-    output_name="test_001"
-)
-client.gen_image()  # 返回输出文件路径
-```
-
-## lark_send.py — 飞书发送
-
-上传图片到飞书临时素材，再发送消息到指定会话。
-
-### 推送流程
-
-1. 调用 `https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal` 获取 token
-2. POST `https://open.larksuite.com/open-apis/im/v1/images` 上传图片，获取 `image_key`
-3. POST `https://open.larksuite.com/open-apis/im/v1/messages` 发送图片消息
-
-### Python API
-
-```python
-from lark_send import start
-
-# 发送到群聊
-start(
-    image_path="/path/to/image.png",
-    chat_id="oc_xxxxxxx",
-    open_id=None
-)
-
-# 发送到私聊
-start(
-    image_path="/path/to/image.png",
-    chat_id=None,
-    open_id="ou_xxxxxxx"
-)
-```
+1. 连接 ComfyUI WebSocket `/ws?clientId=xxx`
+2. POST `/prompt` 提交工作流
+3. 监听 WebSocket，收集生成完毕的图片数据
+4. 从 `/history/{prompt_id}` 下载图片，保存到 `output/` 目录
+5. 上传图片到飞书临时素材，发送消息到指定会话
 
 ## 输出
 
-生成的图片保存在项目根目录下的 `output/` 文件夹，文件名 `{output_name}.png`（未指定 output_name 时为 UUID）。
-
-## .gitignore
-
-已忽略：`__pycache__/`、`venv/`、`.venv/`、`output/`、`rcomfyui.log`、`.idea/`、`.DS_Store`
+生成的图片保存在项目根目录 `output/` 下，文件名为 UUID（或通过 Python API 指定 `output_name`）。

@@ -34,20 +34,35 @@ def _load_config() -> dict:
         "sampler": c.get("sampler", "euler"),
         "scheduler": c.get("scheduler", "sgm_uniform"),
         "denoise_strength": c.getfloat("denoise_strength", 1.0),
+        "selfee_model": c.get("selfeeModel", "animePastelDream_softBakedVae.safetensors"),
+        "selfee_width": c.getint("selfeeWidth", 512),
+        "selfee_height": c.getint("selfeeHeight", 768),
     }
 
 
 class ComfyUIClient:
-    def __init__(self, positive_prompt: str, negative_prompt: str = '', output_name: str = None):
+    def __init__(self, positive_prompt: str, negative_prompt: str = '', output_name: str = None, selfee: bool = False):
         self.config = _load_config()
+        self.selfee = selfee
+        if selfee:
+            self.config["model"] = self.config["selfee_model"]
+            self.config["image_width"] = self.config["selfee_width"]
+            self.config["image_height"] = self.config["selfee_height"]
 
         if not positive_prompt:
             raise ValueError("positive_prompt is empty. Please provide a positive prompt.")
         else:
-            self.positive_prompt = positive_prompt
+            if selfee:
+                selfee_prefix = "masterpiece, best quality, ultra-detailed, illustration,(1girl),beautiful detailed eyes, looking at viewer, close up, pink hair, shy, cat ears,"
+                self.positive_prompt = f'{selfee_prefix} {positive_prompt}'
+            else:
+                self.positive_prompt = positive_prompt
 
-        default_negative = "worst quality, low quality, blurry, bad anatomy, bad hands, extra digits, fewer digits, cropped, watermark, signature, text, deformed, monochrome, greyscale, "
-        self.negative_prompt = f'{default_negative}{negative_prompt}'
+        if selfee:
+            self.negative_prompt = "nsfw, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, normal quality, ((monochrome:1.5)), ((grayscale)), skin spots, acnes, skin blemishes, age spot, (outdoor:1.6), manboobs, backlight,(ugly:1.331), (duplicate:1.331), (morbid:1.21), (mutilated:1.21), (tranny:1.331), mutated hands, (poorly drawn hands:1.331), blurry, (bad anatomy:1.21), (bad proportions:1.331), extra limbs, (disfigured:1.331), (more than 2 nipples:1.331), (missing arms:1.331), (extra legs:1.331), (fused fingers:1.61051), (too many fingers:1.61051), (unclear eyes:1.331), lowers, bad hands, missing fingers, extra digit, (futa:1.1), logo, white letters,missing fingers, extra digit, fewer digits,(mutated hands and fingers:1.5 ), (long body :1.3),bad hands, fused hand, missing hand, disappearing arms, error, missing fingers, missing limb, fused fingers, fused fingers"
+        else:
+            default_negative = "nsfw, worst quality, low quality, blurry, bad anatomy, bad hands, extra digits, fewer digits, cropped, watermark, signature, text, deformed, monochrome, greyscale, "
+            self.negative_prompt = f'{default_negative}{negative_prompt}'
 
         # 生成的图片保存在项目根目录下的 output 文件夹
         self.output_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
@@ -87,7 +102,7 @@ class ComfyUIClient:
             },
             "5": {
                 "inputs": {
-                    "seed": random.randint(0, 18446744073709551615),
+                    "seed": 3020654047 if self.selfee else random.randint(0, 18446744073709551615),
                     "steps": self.config['steps'],
                     "cfg": self.config['cfg'],
                     "sampler_name": self.config['sampler'],
@@ -215,8 +230,8 @@ class ComfyUIClient:
         return self.output_name
 
 
-def start(positive_prompt: str, negative_prompt: str = '', output_name: str = '') -> str:
-    client = ComfyUIClient(positive_prompt, negative_prompt, output_name)
+def start(positive_prompt: str, negative_prompt: str = '', output_name: str = '', selfee: bool = False) -> str:
+    client = ComfyUIClient(positive_prompt, negative_prompt, output_name, selfee)
     saved_files = client.gen_image()
     return saved_files
 
