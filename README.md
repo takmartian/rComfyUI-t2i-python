@@ -1,111 +1,141 @@
 # rComfyUI-t2i
 
-通过 ComfyUI WebSocket API 进行文生图，生成完毕后自动推送图片到飞书会话。
+通过 ComfyUI WebSocket API 进行文生图/文生视频，生成完成后自动发送到飞书会话。
 
-## 项目结构
+Text-to-image and text-to-video via ComfyUI WebSocket API, with automatic delivery to Lark conversations.
 
-```
+---
+
+## 功能概览 / Features
+
+- 支持 `t2i` 文生图（普通模式 + `--selfee` 模式）
+- 支持 `t2v` 文生视频（`--t2v`）
+- 自动将生成结果发送到指定飞书会话（图片消息或媒体消息）
+- CLI 参数校验通过后立即返回 `OK`，后台异步执行生成与发送
+
+---
+
+## 项目结构 / Project Structure
+
+```text
 rComfyUI-t2i/
 ├── README.md
-├── SKILL.md              # Agent 使用指南
-├── .gitignore
+├── SKILL.md
+├── output/                 # 生成结果与日志
 └── scripts/
-    ├── main.py           # CLI 入口，串联生图与发送
-    ├── t2i.py            # ComfyUI 文生图客户端
-    ├── lark_send.py      # 飞书图片推送
-    └── config.ini        # 运行参数配置
+    ├── main.py             # CLI 入口：参数解析、模式选择、后台执行
+    ├── t2i.py              # ComfyUI 文生图客户端
+    ├── t2v.py              # ComfyUI 文生视频客户端（含首帧提取）
+    └── lark_send.py        # 飞书发送（图片/视频）
 ```
 
-## 安装依赖
+---
+
+## 安装依赖 / Installation
 
 ```bash
-pip install websocket-client requests requests-toolbelt Pillow
+pip install websocket-client requests requests-toolbelt Pillow opencv-python
 ```
 
-## 环境变量
+---
 
-| 变量名 | 必填 | 说明 |
+## 环境变量 / Environment Variables
+
+| 变量名 / Variable | 必填 / Required | 说明 / Description |
 |---|---|---|
-| `COMFYUI_SERVER_ADDRESS` | 是 | ComfyUI 服务地址，如 `192.168.1.1:8188` |
-| `LARK_APP_ID` | 是 | 飞书应用 App ID |
-| `LARK_APP_SECRET` | 是 | 飞书应用 App Secret |
+| `COMFYUI_SERVER_ADDRESS` | 是 / Yes | ComfyUI 服务地址，例如 `127.0.0.1:8188` |
+| `LARK_APP_ID` | 是 / Yes | 飞书/Lark 应用 App ID |
+| `LARK_APP_SECRET` | 是 / Yes | 飞书/Lark 应用 App Secret |
+| `LARK_BASE_URL` | 否 / No | API 域名，默认 `https://open.larksuite.com`；国内飞书可用 `https://open.feishu.cn` |
 
-## config.ini
+---
 
-```ini
-[config]
-model=ponyRealism_V22.safetensors
-image-width=1024
-image-height=1024
-steps=45
-cfg=5.0
-sampler=euler
-scheduler=karras
-denoise_strength=1.0
-selfeeModel=animePastelDream_softBakedVae.safetensors
-selfeeWidth=512
-selfeeHeight=768
-```
-
-| 参数 | 说明 |
-|---|---|
-| `model` | 默认模型文件名 |
-| `image-width` / `image-height` | 默认输出分辨率 |
-| `steps` | 采样步数 |
-| `cfg` | CFG 强度 |
-| `sampler` | 采样器 |
-| `scheduler` | 调度器 |
-| `denoise_strength` | 去噪强度 |
-| `selfeeModel` | selfee 模式专用模型 |
-| `selfeeWidth` / `selfeeHeight` | selfee 模式输出分辨率 |
-
-## 使用方法
+## 使用方法 / Usage
 
 ```bash
 cd scripts
 ```
 
-### 普通模式
+### 1) 普通文生图 / Standard t2i
 
 ```bash
 python main.py \
   --chat_id "<chat_id 或 open_id>" \
-  --positive_prompt "masterpiece, best quality, 1girl, solo, smile" \
-  --negative_prompt "blurry, low quality"
+  --positive_prompt "夕阳下的海边，一个女孩站在礁石上眺望远方，逆光剪影，海浪拍打，胶片质感"
 ```
 
-### selfee 模式
+### 2) selfee 文生图 / Selfee t2i
 
-使用预设的粉发猫耳少女角色，只需描述动作、表情、环境、场所、天气等，人物与负向提示词均已内置。
+> `--selfee` 仅用于 `t2i`。
 
 ```bash
 python main.py \
   --chat_id "<chat_id 或 open_id>" \
   --selfee \
-  --positive_prompt "laughing, sitting under cherry blossoms, petals falling, soft spring light"
+  --positive_prompt "sitting at a cozy desk, (focused expression:1.2), warm lamp light, dark room with blue monitor glow"
 ```
 
-### 参数说明
+### 3) 文生视频 / t2v
 
-| 参数 | 必传 | 说明 |
+```bash
+python main.py \
+  --chat_id "<chat_id 或 open_id>" \
+  --t2v \
+  --positive_prompt "一个时髦的女人走在东京霓虹街头，镜头跟拍，地面潮湿反光，电影感"
+```
+
+---
+
+## 参数说明 / Arguments
+
+| 参数 / Argument | 必传 / Required | 说明 / Description |
 |---|---|---|
-| `--chat_id` | 是 | 飞书群 ID（`oc_` 开头）或用户 open ID（`ou_` 开头） |
-| `--positive_prompt` | 是 | 正向提示词（英文） |
-| `--negative_prompt` | 否 | 负向提示词，selfee 模式下忽略 |
-| `--selfee` | 否 | 启用 selfee 模式，覆盖模型与分辨率，并使用内置角色和负向提示词 |
+| `--chat_id` | 是 / Yes | 飞书会话 ID（`oc_...`）或用户 open_id（`ou_...`） |
+| `--positive_prompt` | 是 / Yes | 生成提示词（图片或视频） |
+| `--selfee` | 否 / No | 启用 selfee 模式（仅 `t2i` 有效） |
+| `--t2v` | 否 / No | 启用 `t2v` 模式生成视频 |
 
-`--chat_id` 根据前缀自动判断发送类型：
-- `oc_` 开头 → 群聊（chat_id）
-- `ou_` 开头 → 私聊（open_id）
+**参数约束：**
+- `--t2v` 与 `--selfee` 不能同时使用
 
-## 生成流程
+---
 
-1. 连接 ComfyUI WebSocket `/ws?clientId=xxx`
-2. POST `/prompt` 提交工作流
-3. 监听 WebSocket，收集生成完毕的图片数据
-4. 从 `/history/{prompt_id}` 下载图片，保存到 `output/` 目录
-5. 上传图片到飞书临时素材，发送消息到指定会话
+## 发送行为 / Delivery Behavior
 
-## 输出
+- 生成图片（`.png/.jpg/...`）时：
+  - 上传图片到飞书 `im/v1/images`
+  - 发送 `msg_type=image`
+- 生成视频（`.mp4`）时：
+  - 先上传同名封面图（`xxx.png`）获取 `image_key`
+  - 再上传视频获取 `file_key`
+  - 发送 `msg_type=media`，`content` 内包含 `file_key` 和 `image_key`
 
-生成的图片保存在项目根目录 `output/` 下，文件名为 UUID（或通过 Python API 指定 `output_name`）。
+---
+
+## 生成流程 / How It Works
+
+1. `main.py` 校验参数
+2. 父进程立即输出 `OK`
+3. 子进程后台执行：
+   - `t2i`：提交图片工作流并下载图片
+   - `t2v`：提交视频工作流并下载 mp4，同时提取首帧为同名 png
+4. `lark_send.py` 根据文件类型自动发送到飞书
+
+---
+
+## 输出文件 / Outputs
+
+| 文件 / File | 说明 / Description |
+|---|---|
+| `output/<name>.png` | t2i 生成图片；或 t2v 的 mp4 首帧图 |
+| `output/<name>.mp4` | t2v 生成视频 |
+| `output/run.log` | 运行日志 |
+| `output/error.log` | 后台异常日志 |
+
+---
+
+## 常见问题 / Notes
+
+- 若发送视频时报“同名 PNG 不存在”，请先确保该 mp4 的首帧图已生成为同名 `.png`。
+- 若 `LARK_APP_ID` / `LARK_APP_SECRET` 未配置，会在发送阶段报错。
+- 若使用 `open_id` 发送，请传入 `ou_...`；传入 `oc_...` 会按 `chat_id` 处理。
